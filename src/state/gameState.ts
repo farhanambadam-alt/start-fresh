@@ -70,6 +70,16 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
       console.log('[GameState] Error:', error);
       set({ error });
     },
+    onAuthRequired: () => {
+      console.log('[GameState] Auth required - redirecting to login');
+      // Clear state and trigger redirect
+      set({
+        gameState: null,
+        error: 'Please log in to play',
+      });
+      // Redirect will be handled by the component layer
+      window.location.href = '/auth';
+    },
   });
 
   return {
@@ -88,9 +98,9 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
 
     // Connection actions
     connectToRoom: (roomCode) => {
-      const { authToken } = get();
       set({ error: null });
-      gameSocket.connect(roomCode, authToken || undefined);
+      // Auth token is now retrieved inside gameSocket from Supabase session
+      gameSocket.connect(roomCode);
     },
 
     disconnect: () => {
