@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ludo Game Design System */
+
+@layer base {
+  :root {
+    --background: 220 20% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 220 15% 15%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 220 15% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 45 100% 50%;
+    --primary-foreground: 220 20% 10%;
+
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 220 10% 25%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 280 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 25%;
+    --input: 220 15% 20%;
+    --ring: 45 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Ludo Player Colors */
+    --ludo-red: 0 85% 55%;
+    --ludo-green: 145 70% 45%;
+    --ludo-yellow: 45 100% 55%;
+    --ludo-blue: 210 90% 55%;
+
+    /* Glows */
+    --glow-red: 0 0 20px hsl(0 85% 55% / 0.6);
+    --glow-green: 0 0 20px hsl(145 70% 45% / 0.6);
+    --glow-yellow: 0 0 20px hsl(45 100% 55% / 0.6);
+    --glow-blue: 0 0 20px hsl(210 90% 55% / 0.6);
+
+    --sidebar-background: 220 15% 12%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 45 100% 50%;
+    --sidebar-primary-foreground: 220 20% 10%;
+    --sidebar-accent: 220 15% 18%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 15% 20%;
+    --sidebar-ring: 45 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground overflow-hidden;
+  }
+}
+
+/* Perspective and 3D utilities */
+.perspective-dice { 
+  perspective: 1000px; 
+}
+
+.preserve-3d { 
+  transform-style: preserve-3d; 
+}
+
+.backface-hidden { 
+  backface-visibility: hidden; 
+}
+
+/* Dice tumble animation */
+@keyframes tumble {
+  0% { 
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); 
+  }
+  50% { 
+    transform: rotateX(360deg) rotateY(180deg) rotateZ(90deg); 
+  }
+  100% { 
+    transform: rotateX(720deg) rotateY(360deg) rotateZ(180deg); 
+  }
+}
+
+.animate-tumble { 
+  animation: tumble 0.5s linear infinite; 
+}
+
+/* Token hop/arc animation */
+@keyframes hop {
+  0% {
+    transform: translateY(0) scale(1);
+    z-index: 10;
+  }
+  50% {
+    transform: translateY(-30px) scale(1.2);
+    z-index: 100;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    z-index: 10;
+  }
+}
+
+.animate-hop {
+  animation: hop 0.3s ease-in-out;
+}
+
+/* Spinning ring effect during movement */
+@keyframes spin-ring {
+  0% {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-spin-ring {
+  animation: spin-ring 0.5s linear;
+}
+
+/* Token highlight pulse */
+@keyframes token-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 0 3px currentColor, 0 0 15px currentColor;
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 0 5px currentColor, 0 0 25px currentColor;
+    transform: scale(1.1);
+  }
+}
+
+.token-active {
+  animation: token-pulse 1s ease-in-out infinite;
+}
+
+/* Victory Star Animation */
+@keyframes star-glow {
+  0%, 100% { filter: drop-shadow(0 0 5px currentColor); }
+  50% { filter: drop-shadow(0 0 15px currentColor); }
+}
+
+.victory-star {
+  animation: star-glow 2s ease-in-out infinite;
+}
