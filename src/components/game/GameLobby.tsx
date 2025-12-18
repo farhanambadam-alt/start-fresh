@@ -79,14 +79,14 @@ const GameLobby: React.FC<GameLobbyProps> = ({ onJoinRoom }) => {
   // Connection status indicator
   const ConnectionIndicator = () => (
     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-      connectionState === 'connected' ? 'bg-green-500/20 text-green-400' :
-      connectionState === 'connecting' || connectionState === 'reconnecting' ? 'bg-yellow-500/20 text-yellow-400' :
+      connectionState === 'in_game' ? 'bg-green-500/20 text-green-400' :
+      connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'authenticating' || connectionState === 'joining' ? 'bg-yellow-500/20 text-yellow-400' :
       'bg-red-500/20 text-red-400'
     }`}>
-      {connectionState === 'connected' ? <Wifi size={14} /> : 
-       connectionState === 'connecting' || connectionState === 'reconnecting' ? <Loader2 size={14} className="animate-spin" /> : 
+      {connectionState === 'in_game' ? <Wifi size={14} /> : 
+       connectionState === 'connecting' || connectionState === 'reconnecting' || connectionState === 'authenticating' || connectionState === 'joining' ? <Loader2 size={14} className="animate-spin" /> : 
        <WifiOff size={14} />}
-      <span className="capitalize">{connectionState}</span>
+      <span className="capitalize">{connectionState === 'joining' ? 'joining room' : connectionState}</span>
     </div>
   );
 

@@ -160,8 +160,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
       {/* Control Buttons */}
       <div className="fixed top-4 right-4 z-50 flex gap-2">
         {/* Connection indicator */}
-        <div className={`p-3 rounded-full ${connectionState === 'connected' ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
-          {connectionState === 'connected' ? (
+        <div className={`p-3 rounded-full ${connectionState === 'in_game' ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+          {connectionState === 'in_game' ? (
             <Wifi size={20} className="text-green-400" />
           ) : connectionState === 'reconnecting' ? (
             <Loader2 size={20} className="text-yellow-400 animate-spin" />
