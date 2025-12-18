@@ -1,8 +1,18 @@
 /**
- * Game Board Component
+ * Game Board Component - REFACTORED
  * 
  * Renders the Ludo board based ENTIRELY on server state.
  * Only sends player intents (roll dice, move token) - never computes game logic.
+ * 
+ * HARD NULL GUARDS (NO EXCEPTIONS):
+ * - if (!gameState) return null;
+ * - const players = gameState?.players ?? [];
+ * - const tokens = gameState?.tokens ?? {};
+ * 
+ * TURN LOGIC (SERVER-AUTHORITATIVE):
+ * const isMyTurn = gameState.currentTurn === userId && gameState.phase !== "END";
+ * 
+ * Frontend is render + intent ONLY.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -33,7 +43,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
   // State from store (server-synced)
   const { gameState, connectionState, isRolling, diceAnimationValue, rollDice, moveToken, userId } = useGameStore();
   
-  // Safe state derivation with fallbacks (NEVER assume state exists)
+  // HARD NULL GUARDS - Safe state derivation with fallbacks
   const phase = gameState?.phase ?? 'WAITING';
   const dice = gameState?.dice ?? null;
   const players = gameState?.players ?? [];
@@ -41,11 +51,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
   const winner = gameState?.winner ?? null;
   const movableTokens = gameState?.movableTokens ?? [];
   
-  // Turn-based UI logic (correct)
+  // TURN LOGIC (SERVER-AUTHORITATIVE)
   const isMyTurn = gameState?.currentTurn === userId && phase !== 'END';
-  
-  // My color derivation
-  const myColor = players.find((p) => p.id === userId)?.color;
 
   const tokenPixelSize = (LUDO_DATA.tokenSize / 100) * WORLD_SIZE;
 
@@ -105,9 +112,9 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     };
   }, [calculateTransform]);
 
-  // Convert server token positions to display positions
+  // BOARD RENDERING - Token positions use tokens[playerId] pattern
   const getTokenPosition = (color: PlayerColor, playerId: string, tokenIndex: number) => {
-    // Use tokens from local derived state (NEVER gameState.ui.tokens)
+    // Use tokens[userId] ?? [-1, -1, -1, -1] pattern - never assume token arrays exist
     const playerTokens = tokens[playerId] ?? [-1, -1, -1, -1];
     const tokenPathIndex = playerTokens[tokenIndex];
     
@@ -139,26 +146,27 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     players.find(p => p.id === gameState.currentTurn)?.color : 
     undefined;
   
-  // Validate that the color is a valid PlayerColor before using
+  // Validate that the color is a valid PlayerColor before using LUDO_DATA
   const currentPlayerColor: PlayerColor | undefined = 
-    rawCurrentPlayerColor && ['red', 'green', 'yellow', 'blue'].includes(rawCurrentPlayerColor) 
+    rawCurrentPlayerColor && PLAYERS.includes(rawCurrentPlayerColor as PlayerColor) 
       ? rawCurrentPlayerColor as PlayerColor 
       : undefined;
 
-  // Handle token click
+  // Handle token click - send intent only
   const handleTokenClick = (tokenIndex: number) => {
     if (phase === 'MOVE' && isMyTurn && movableTokens.includes(tokenIndex)) {
       moveToken(tokenIndex);
     }
   };
 
-  // Handle dice click
+  // Handle dice click - send intent only
   const handleDiceClick = () => {
     if (phase === 'ROLL' && isMyTurn && !isRolling) {
       rollDice();
     }
   };
 
+  // HARD NULL GUARD - Before any render
   if (!gameState) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
@@ -196,10 +204,10 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         </button>
       </div>
 
-      {/* Turn Indicator */}
+      {/* Turn Indicator - Disabled when not my turn */}
       <div className="fixed top-4 left-4 z-50 px-4 py-2 rounded-full bg-card/90 backdrop-blur-sm border border-border">
         <span className={`font-medium capitalize ${isMyTurn ? 'text-green-400' : 'text-muted-foreground'}`}>
-          {isMyTurn ? 'Your turn!' : `${currentPlayerColor || 'Waiting'}'s turn`}
+          {isMyTurn ? 'Your turn!' : `${currentPlayerColor ?? 'Waiting'}'s turn`}
         </span>
       </div>
 
@@ -213,8 +221,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         </div>
       )}
 
-      {/* Room Info (safe access) */}
-      {gameState?.roomCode && (
+      {/* Room Info */}
+      {gameState.roomCode && (
         <div className="fixed bottom-4 left-4 z-50 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur-sm border border-border">
           <span className="text-xs text-muted-foreground">Room: </span>
           <span className="text-sm font-mono font-bold text-foreground">{gameState.roomCode}</span>
@@ -241,19 +249,19 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {/* Player Avatars */}
+        {/* Player Avatars - Use LUDO_DATA[color].ui for layout positions */}
         {PLAYERS.map((color) => {
-          const ui = LUDO_DATA[color].ui;
+          const layoutUi = LUDO_DATA[color].ui;
           const isPlayerInGame = players.some((p) => p.color === color);
 
           return (
             <PlayerAvatar
               key={`avatar-${color}`}
               color={color}
-              x={ui.avatar.x}
-              y={ui.avatar.y}
-              width={ui.avatar.width}
-              height={ui.avatar.height}
+              x={layoutUi.avatar.x}
+              y={layoutUi.avatar.y}
+              width={layoutUi.avatar.width}
+              height={layoutUi.avatar.height}
               isActive={currentPlayerColor === color}
               style={{ opacity: isPlayerInGame ? 1 : 0.3 }}
             />
@@ -262,18 +270,18 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
 
         {/* Dice - Only for current player's position */}
         {currentPlayerColor && (() => {
-          const ui = LUDO_DATA[currentPlayerColor].ui;
-          const diceSize = (ui.dice.width / 100) * WORLD_SIZE * 0.8;
+          const layoutUi = LUDO_DATA[currentPlayerColor].ui;
+          const diceSize = (layoutUi.dice.width / 100) * WORLD_SIZE * 0.8;
           const canClick = isMyTurn && phase === 'ROLL';
 
           return (
             <div
               className="absolute flex items-center justify-center transition-opacity duration-300"
               style={{
-                left: `${ui.dice.x}%`,
-                top: `${ui.dice.y}%`,
-                width: `${ui.dice.width}%`,
-                height: `${ui.dice.height}%`,
+                left: `${layoutUi.dice.x}%`,
+                top: `${layoutUi.dice.y}%`,
+                width: `${layoutUi.dice.width}%`,
+                height: `${layoutUi.dice.height}%`,
               }}
             >
               <Dice3D
@@ -288,10 +296,10 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           );
         })()}
 
-        {/* Render Tokens for all players (use derived players/tokens state) */}
+        {/* Render Tokens - Use tokens[player.id] ?? [-1, -1, -1, -1] pattern */}
         {players.map((player) => {
           const color = player.color as PlayerColor;
-          if (!color) return null;
+          if (!color || !PLAYERS.includes(color)) return null;
 
           const tokenPositions = tokens[player.id] ?? [-1, -1, -1, -1];
           const pathLength = LUDO_DATA[color].path.length;
@@ -340,7 +348,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         })}
       </div>
 
-      {/* Winner Modal (use derived winner state) */}
+      {/* Winner Modal - Derived from winner state */}
       {phase === 'END' && winner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div

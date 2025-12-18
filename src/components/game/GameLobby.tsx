@@ -7,7 +7,7 @@
 
 import React, { useState } from 'react';
 import { Users, Plus, LogIn, Loader2, Copy, Check, Wifi, WifiOff, AlertCircle } from 'lucide-react';
-import { useGameStore, useMyColor } from '@/state/gameState';
+import { useGameStore } from '@/state/gameState';
 import { generateRoomCode, validateRoomCode } from '@/network/gameSocket';
 import { PlayerColor } from '@/data/ludoData';
 
@@ -25,16 +25,15 @@ interface GameLobbyProps {
 }
 
 const GameLobby: React.FC<GameLobbyProps> = ({ onJoinRoom }) => {
-  const { connectionState, gameState, error } = useGameStore();
+  const { connectionState, gameState, error, userId } = useGameStore();
   const [roomCode, setRoomCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
   
-  const myColor = useMyColor();
-  const userId = useGameStore((s) => s.userId);
-  const isWaiting = gameState?.phase === 'WAITING';
+  // Safe state derivation with null guards
   const players = gameState?.players ?? [];
+  const isWaiting = gameState?.phase === 'WAITING';
 
   const handleCopyRoomId = async () => {
     if (gameState?.roomCode) {
