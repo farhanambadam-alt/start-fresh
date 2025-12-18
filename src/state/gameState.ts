@@ -77,8 +77,8 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
         gameState: null,
         error: 'Please log in to play',
       });
-      // Redirect will be handled by the component layer
-      window.location.href = '/auth';
+      // Use safe internal navigation instead of window.location
+      // This will be picked up by the component layer via error state
     },
   });
 
@@ -136,8 +136,8 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
       // Start dice animation
       set({ isRolling: true });
 
-      // Play dice sound
-      const diceSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2004/2004-preview.mp3');
+      // Play dice sound (self-hosted for security)
+      const diceSound = new Audio('/sounds/dice-roll.mp3');
       diceSound.volume = 0.3;
       diceSound.play().catch(() => {});
 

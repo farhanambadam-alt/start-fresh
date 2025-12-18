@@ -10,8 +10,30 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Mail, Lock, Loader2, User, LogIn, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { z } from 'zod';
 
 type AuthMode = 'login' | 'signup';
+
+// Input validation schemas
+const emailSchema = z.string().trim().email('Invalid email address').max(255, 'Email too long');
+const passwordSchema = z.string().min(6, 'Password must be at least 6 characters').max(128, 'Password too long');
+const displayNameSchema = z.string().trim().max(50, 'Display name too long').optional();
+
+// Allowed origins for redirect (production URLs)
+const ALLOWED_ORIGINS = [
+  'https://ludo.lovable.app',
+  'https://id-preview--989925a7-6fee-4f1b-905d-5800dc29bdb4.lovable.app',
+];
+
+// Get safe redirect URL (fallback to relative path if origin not allowed)
+const getSafeRedirectUrl = (): string => {
+  const origin = window.location.origin;
+  if (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.lovable.app')) {
+    return `${origin}/`;
+  }
+  // Fallback to relative path for safety
+  return '/';
+};
 
 const Auth: React.FC = () => {
   const navigate = useNavigate();
@@ -46,22 +68,37 @@ const Auth: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    // Validate inputs with zod
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
       toast({
-        title: 'Missing fields',
-        description: 'Please enter both email and password.',
+        title: 'Invalid email',
+        description: emailResult.error.errors[0].message,
         variant: 'destructive',
       });
       return;
     }
 
-    if (mode === 'signup' && password.length < 6) {
+    const passwordResult = passwordSchema.safeParse(password);
+    if (!passwordResult.success) {
       toast({
-        title: 'Password too short',
-        description: 'Password must be at least 6 characters.',
+        title: 'Invalid password',
+        description: passwordResult.error.errors[0].message,
         variant: 'destructive',
       });
       return;
+    }
+
+    if (mode === 'signup' && displayName) {
+      const displayNameResult = displayNameSchema.safeParse(displayName);
+      if (!displayNameResult.success) {
+        toast({
+          title: 'Invalid display name',
+          description: displayNameResult.error.errors[0].message,
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setLoading(true);
@@ -88,12 +125,12 @@ const Auth: React.FC = () => {
         }
       } else {
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: emailResult.data,
+          password: passwordResult.data,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: getSafeRedirectUrl(),
             data: {
-              display_name: displayName || email.split('@')[0],
+              display_name: displayName.trim() || emailResult.data.split('@')[0],
             },
           },
         });
