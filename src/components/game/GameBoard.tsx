@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LUDO_DATA, PlayerColor } from '@/data/ludoData';
-import { useGameStore, useIsMyTurn, useCurrentPhase, useMovableTokens, useMyColor } from '@/state/gameState';
+import { useGameStore } from '@/state/gameState';
 import Dice3D from './Dice3D';
 import Token from './Token';
 import VictoryCounter from './VictoryCounter';
@@ -32,10 +32,20 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
 
   // State from store (server-synced)
   const { gameState, connectionState, isRolling, diceAnimationValue, rollDice, moveToken, userId } = useGameStore();
-  const isMyTurn = useIsMyTurn();
-  const phase = useCurrentPhase();
-  const movableTokens = useMovableTokens();
-  const myColor = useMyColor();
+  
+  // Safe state derivation with fallbacks (NEVER assume state exists)
+  const phase = gameState?.phase ?? 'WAITING';
+  const dice = gameState?.dice ?? null;
+  const players = gameState?.players ?? [];
+  const tokens = gameState?.tokens ?? {};
+  const winner = gameState?.winner ?? null;
+  const movableTokens = gameState?.movableTokens ?? [];
+  
+  // Turn-based UI logic (correct)
+  const isMyTurn = gameState?.currentTurn === userId && phase !== 'END';
+  
+  // My color derivation
+  const myColor = players.find((p) => p.id === userId)?.color;
 
   const tokenPixelSize = (LUDO_DATA.tokenSize / 100) * WORLD_SIZE;
 
@@ -96,15 +106,9 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
   }, [calculateTransform]);
 
   // Convert server token positions to display positions
-  const getTokenPosition = (color: PlayerColor, tokenIndex: number) => {
-    const positions = gameState?.tokens?.[userId!] ?? [-1, -1, -1, -1];
-    const pathIndex = positions[tokenIndex];
-    
-    // Find the player by color to get their token positions
-    const player = gameState?.players.find(p => p.color === color);
-    if (!player) return LUDO_DATA[color].base[tokenIndex];
-    
-    const playerTokens = gameState?.tokens?.[player.id] ?? [-1, -1, -1, -1];
+  const getTokenPosition = (color: PlayerColor, playerId: string, tokenIndex: number) => {
+    // Use tokens from local derived state (NEVER gameState.ui.tokens)
+    const playerTokens = tokens[playerId] ?? [-1, -1, -1, -1];
     const tokenPathIndex = playerTokens[tokenIndex];
     
     if (tokenPathIndex === -1) {
@@ -122,16 +126,18 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
 
   // Get finished count for a player
   const getFinishedCount = (color: PlayerColor): number => {
-    const player = gameState?.players.find(p => p.color === color);
+    const player = players.find(p => p.color === color);
     if (!player) return 0;
     
-    const tokens = gameState?.tokens?.[player.id] ?? [-1, -1, -1, -1];
+    const playerTokens = tokens[player.id] ?? [-1, -1, -1, -1];
     const pathLength = LUDO_DATA[color].path.length;
-    return tokens.filter(pos => pos >= pathLength - 1).length;
+    return playerTokens.filter(pos => pos >= pathLength - 1).length;
   };
 
-  // Get current player's color
-  const currentPlayerColor = gameState?.players.find(p => p.id === gameState.currentTurn)?.color as PlayerColor | undefined;
+  // Get current player's color (safe access)
+  const currentPlayerColor = gameState ? 
+    (players.find(p => p.id === gameState.currentTurn)?.color as PlayerColor | undefined) : 
+    undefined;
 
   // Handle token click
   const handleTokenClick = (tokenIndex: number) => {
@@ -201,8 +207,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         </div>
       )}
 
-      {/* Room Info */}
-      {gameState.roomCode && (
+      {/* Room Info (safe access) */}
+      {gameState?.roomCode && (
         <div className="fixed bottom-4 left-4 z-50 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur-sm border border-border">
           <span className="text-xs text-muted-foreground">Room: </span>
           <span className="text-sm font-mono font-bold text-foreground">{gameState.roomCode}</span>
@@ -232,7 +238,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         {/* Player Avatars */}
         {PLAYERS.map((color) => {
           const ui = LUDO_DATA[color].ui;
-          const isInGame = gameState.players.some((p) => p.color === color);
+          const isPlayerInGame = players.some((p) => p.color === color);
 
           return (
             <PlayerAvatar
@@ -243,7 +249,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
               width={ui.avatar.width}
               height={ui.avatar.height}
               isActive={currentPlayerColor === color}
-              style={{ opacity: isInGame ? 1 : 0.3 }}
+              style={{ opacity: isPlayerInGame ? 1 : 0.3 }}
             />
           );
         })}
@@ -265,7 +271,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
               }}
             >
               <Dice3D
-                value={isRolling ? diceAnimationValue : gameState.dice}
+                value={isRolling ? diceAnimationValue : (dice ?? 1)}
                 isRolling={isRolling}
                 size={diceSize}
                 color={currentPlayerColor}
@@ -276,19 +282,19 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           );
         })()}
 
-        {/* Render Tokens for all players */}
-        {gameState.players.map((player) => {
+        {/* Render Tokens for all players (use derived players/tokens state) */}
+        {players.map((player) => {
           const color = player.color as PlayerColor;
           if (!color) return null;
 
-          const tokenPositions = gameState.tokens[player.id] ?? [-1, -1, -1, -1];
+          const tokenPositions = tokens[player.id] ?? [-1, -1, -1, -1];
           const pathLength = LUDO_DATA[color].path.length;
 
           return tokenPositions.map((pathIndex, tokenIndex) => {
             // Skip finished tokens
             if (pathIndex >= pathLength - 1) return null;
 
-            const pos = getTokenPosition(color, tokenIndex);
+            const pos = getTokenPosition(color, player.id, tokenIndex);
             const isSelectable = isMyTurn && player.id === userId && phase === 'MOVE' && movableTokens.includes(tokenIndex);
 
             return (
@@ -328,8 +334,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         })}
       </div>
 
-      {/* Winner Modal */}
-      {phase === 'END' && gameState.winner && (
+      {/* Winner Modal (use derived winner state) */}
+      {phase === 'END' && winner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div
             className="p-8 rounded-2xl text-center animate-scale-in"
@@ -339,10 +345,10 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
             }}
           >
             <h2 className="text-4xl font-bold text-foreground mb-4">
-              🎉 {gameState.winner === userId ? 'You Win!' : 'Game Over'} 🎉
+              🎉 {winner === userId ? 'You Win!' : 'Game Over'} 🎉
             </h2>
             <p className="text-muted-foreground mb-6">
-              {gameState.winner === userId ? 'Congratulations!' : 'Better luck next time!'}
+              {winner === userId ? 'Congratulations!' : 'Better luck next time!'}
             </p>
             <button
               onClick={onLeave}
