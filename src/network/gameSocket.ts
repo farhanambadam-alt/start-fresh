@@ -65,14 +65,20 @@ export type ServerGameState = {
   movableTokens?: number[];
 };
 
-// Auth response from server
-type AuthResponse = {
-  authenticated: boolean;
-  error?: string;
+// Auth success response from server
+type AuthSuccessResponse = {
+  type: 'AUTH_SUCCESS';
+  userId: string;
 };
 
-// Connection state
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'authenticating';
+// Error response from server
+type ErrorResponse = {
+  type: 'ERROR';
+  message: string;
+};
+
+// Connection state - added 'joining' and 'in_game' for proper state machine
+export type ConnectionState = 'disconnected' | 'connecting' | 'authenticating' | 'joining' | 'in_game' | 'reconnecting' | 'error';
 
 // Callbacks
 interface SocketCallbacks {
@@ -162,28 +168,40 @@ class GameSocket {
           const data = JSON.parse(event.data);
           console.log('[GameSocket] Received:', data);
 
-          // Check for auth response
-          if ('authenticated' in data) {
-            this.handleAuthResponse(data as AuthResponse);
+          // 1️⃣ Auth success - IMMEDIATELY join room
+          if (data.type === 'AUTH_SUCCESS') {
+            console.log('[GameSocket] Authentication successful! userId:', data.userId);
+            this.isAuthenticated = true;
+            
+            // 🔥 IMMEDIATELY JOIN ROOM after AUTH_SUCCESS
+            if (this.pendingRoomCode) {
+              this.callbacks?.onConnectionChange('joining');
+              console.log('[GameSocket] Sending JOIN_ROOM for:', this.pendingRoomCode);
+              this.send({ type: 'JOIN_ROOM', roomCode: this.pendingRoomCode });
+            }
             return;
           }
 
-          // Check for error messages
-          if (data.type === 'error' || data.error) {
+          // 2️⃣ State update (room joined or game state sync)
+          if (data.roomCode && data.phase) {
+            console.log('[GameSocket] STATE_UPDATE received, game started!');
+            this.callbacks?.onConnectionChange('in_game');
+            this.callbacks?.onStateUpdate(data as ServerGameState);
+            return;
+          }
+
+          // 3️⃣ Error messages
+          if (data.type === 'ERROR' || data.error) {
             const errorMsg = data.message || data.error || 'Unknown error';
             console.error('[GameSocket] Server error:', errorMsg);
             this.callbacks?.onError(errorMsg);
+            this.callbacks?.onConnectionChange('error');
             
             // If auth error, redirect to login
             if (errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('unauthorized')) {
               this.callbacks?.onAuthRequired();
             }
             return;
-          }
-
-          // Game state update (only process if authenticated)
-          if (this.isAuthenticated && data.roomCode && data.phase) {
-            this.callbacks?.onStateUpdate(data as ServerGameState);
           }
         } catch (err) {
           console.error('[GameSocket] Failed to parse message:', err);
@@ -208,16 +226,17 @@ class GameSocket {
   }
 
   /**
-   * Handle authentication response from server
+   * Handle legacy authentication response from server (if server uses { authenticated: true })
+   * @deprecated Use AUTH_SUCCESS message type instead
    */
-  private handleAuthResponse(response: AuthResponse) {
+  private handleAuthResponse(response: { authenticated: boolean; error?: string }) {
     if (response.authenticated) {
-      console.log('[GameSocket] Authentication successful!');
+      console.log('[GameSocket] Legacy auth successful!');
       this.isAuthenticated = true;
-      this.callbacks?.onConnectionChange('connected');
 
-      // Step 3: NOW send JOIN_ROOM (only after successful auth)
+      // IMMEDIATELY send JOIN_ROOM after auth
       if (this.pendingRoomCode) {
+        this.callbacks?.onConnectionChange('joining');
         console.log('[GameSocket] Sending JOIN_ROOM for:', this.pendingRoomCode);
         this.send({ type: 'JOIN_ROOM', roomCode: this.pendingRoomCode });
       }
@@ -225,6 +244,7 @@ class GameSocket {
       console.error('[GameSocket] Authentication failed:', response.error);
       this.isAuthenticated = false;
       this.callbacks?.onError(response.error || 'Authentication failed');
+      this.callbacks?.onConnectionChange('error');
       this.callbacks?.onAuthRequired();
       this.disconnect();
     }
