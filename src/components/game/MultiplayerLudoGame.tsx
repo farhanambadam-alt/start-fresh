@@ -62,10 +62,6 @@ const MultiplayerLudoGame: React.FC = () => {
     }
   }, [error, navigate]);
 
-  // Determine current view based on state
-  const isInGame = gameState?.phase && gameState.phase !== 'WAITING' && gameState.phase !== 'END';
-  const isInWaitingRoom = gameState?.phase === 'WAITING';
-
   const handleJoinRoom = (roomCode: string) => {
     connectToRoom(roomCode);
   };
@@ -74,12 +70,27 @@ const MultiplayerLudoGame: React.FC = () => {
     disconnect();
   };
 
-  // Show game board if we're in an active game
-  if (isInGame || (isInWaitingRoom && gameState)) {
+  // Derive screen from connectionState (NEVER from gameState.ui)
+  // AUTH screen: connecting or authenticating
+  if (connectionState === 'connecting' || connectionState === 'authenticating') {
+    return <GameLobby onJoinRoom={handleJoinRoom} />;
+  }
+
+  // WAITING_ROOM screen: joining
+  if (connectionState === 'joining') {
     return <GameBoard onLeave={handleLeaveGame} />;
   }
 
-  // Show lobby for joining
+  // GAME screen: in_game
+  if (connectionState === 'in_game') {
+    // RESULT screen: winner exists
+    if (gameState?.winner) {
+      return <GameBoard onLeave={handleLeaveGame} />;
+    }
+    return <GameBoard onLeave={handleLeaveGame} />;
+  }
+
+  // Default: show lobby (disconnected, error, reconnecting states)
   return <GameLobby onJoinRoom={handleJoinRoom} />;
 };
 
