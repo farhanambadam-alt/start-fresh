@@ -1,12 +1,14 @@
 /**
  * Multiplayer Ludo Game - Main Entry Component
  * 
- * This component orchestrates the game flow:
- * 1. Login (Supabase Auth)
- * 2. Lobby (join room by code)
- * 3. Game Board (render server state)
+ * UI DERIVATION RULES (THIS IS LAW):
+ * - if (connectionState === "authenticating") showAuth()
+ * - else if (connectionState === "joining") showWaitingRoom()
+ * - else if (connectionState === "in_game" && gameState) showBoard()
+ * - else if (gameState?.winner) showResult()
  * 
- * CRITICAL: This is a UI-only component. All game logic runs on the backend.
+ * ❌ Never store screen in state
+ * ❌ Never read ui from server
  */
 
 import React, { useEffect } from 'react';
@@ -24,7 +26,6 @@ const MultiplayerLudoGame: React.FC = () => {
     connectToRoom, 
     disconnect,
     setAuth,
-    userId,
     error
   } = useGameStore();
 
@@ -36,14 +37,12 @@ const MultiplayerLudoGame: React.FC = () => {
       if (session?.user) {
         setAuth(session.user.id, session.access_token);
       } else {
-        // No session - redirect to auth
         navigate('/auth');
       }
     };
 
     initAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setAuth(session.user.id, session.access_token);
@@ -70,27 +69,24 @@ const MultiplayerLudoGame: React.FC = () => {
     disconnect();
   };
 
-  // Derive screen from connectionState (NEVER from gameState.ui)
-  // AUTH screen: connecting or authenticating
-  if (connectionState === 'connecting' || connectionState === 'authenticating') {
+  // UI DERIVATION - Derive screen from connectionState (NEVER from stored screen state)
+  
+  // AUTH screen: authenticating
+  if (connectionState === 'authenticating') {
     return <GameLobby onJoinRoom={handleJoinRoom} />;
   }
-
-  // WAITING_ROOM screen: joining
+  
+  // WAITING_ROOM/GAME screen: joining or in_game with gameState
   if (connectionState === 'joining') {
     return <GameBoard onLeave={handleLeaveGame} />;
   }
-
-  // GAME screen: in_game
-  if (connectionState === 'in_game') {
-    // RESULT screen: winner exists
-    if (gameState?.winner) {
-      return <GameBoard onLeave={handleLeaveGame} />;
-    }
+  
+  if (connectionState === 'in_game' && gameState) {
+    // Both GAME and RESULT screens use GameBoard (winner modal is inside)
     return <GameBoard onLeave={handleLeaveGame} />;
   }
 
-  // Default: show lobby (disconnected, error, reconnecting states)
+  // Default: show lobby (disconnected, connecting, error, reconnecting states)
   return <GameLobby onJoinRoom={handleJoinRoom} />;
 };
 

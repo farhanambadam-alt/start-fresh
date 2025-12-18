@@ -1,18 +1,22 @@
 /**
- * Game State Management
+ * Game State Management - REFACTORED
  * 
- * This module manages UI state derived ENTIRELY from server messages.
- * The frontend NEVER computes game logic - it only renders what the server sends.
+ * SINGLE SOURCE OF TRUTH:
+ * - ConnectionState: connection lifecycle
+ * - GameState: server-authoritative game data
  * 
- * CRITICAL: On every server message, fully REPLACE local state.
+ * UI is DERIVED from state, never stored in state.
+ * Frontend is render + intent ONLY.
  */
 
 import { create } from 'zustand';
 import { ServerGameState, ConnectionState, gameSocket } from '@/network/gameSocket';
 
-// UI-specific state (not game logic)
-export type UIState = {
-  // Connection
+/**
+ * Store State - Minimal, server-authoritative
+ */
+type StoreState = {
+  // Connection state machine
   connectionState: ConnectionState;
   error: string | null;
 
@@ -23,12 +27,15 @@ export type UIState = {
   // Server game state (AUTHORITATIVE - never modified locally)
   gameState: ServerGameState | null;
 
-  // UI-only state (animations, etc.)
+  // UI-only animation state (local only, not game logic)
   isRolling: boolean;
   diceAnimationValue: number;
 };
 
-export type GameActions = {
+/**
+ * Store Actions - Intents only, no game logic
+ */
+type StoreActions = {
   // Auth
   setAuth: (userId: string, token: string) => void;
   clearAuth: () => void;
@@ -38,28 +45,23 @@ export type GameActions = {
   disconnect: () => void;
 
   // Server state sync
-  syncServerState: (state: ServerGameState) => void;
   setConnectionState: (state: ConnectionState) => void;
   setError: (error: string | null) => void;
 
   // Player intents (send to server only)
   rollDice: () => void;
   moveToken: (tokenIndex: number) => void;
-
-  // UI-only actions
-  setRolling: (isRolling: boolean) => void;
-  animateDice: () => void;
 };
 
-export const useGameStore = create<UIState & GameActions>((set, get) => {
+export const useGameStore = create<StoreState & StoreActions>((set, get) => {
   // Initialize socket callbacks
   gameSocket.setCallbacks({
     onStateUpdate: (state) => {
       console.log('[GameState] Syncing server state');
       set({
         gameState: state,
-        isRolling: false, // Stop dice animation when we get new state
-        diceAnimationValue: state.dice,
+        isRolling: false,
+        diceAnimationValue: state.dice ?? 1,
       });
     },
     onConnectionChange: (connectionState) => {
@@ -72,13 +74,10 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
     },
     onAuthRequired: () => {
       console.log('[GameState] Auth required - redirecting to login');
-      // Clear state and trigger redirect
       set({
         gameState: null,
         error: 'Please log in to play',
       });
-      // Use safe internal navigation instead of window.location
-      // This will be picked up by the component layer via error state
     },
   });
 
@@ -99,7 +98,6 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
     // Connection actions
     connectToRoom: (roomCode) => {
       set({ error: null });
-      // Auth token is now retrieved inside gameSocket from Supabase session
       gameSocket.connect(roomCode);
     },
 
@@ -112,15 +110,6 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
       });
     },
 
-    // Server state sync (FULL REPLACE)
-    syncServerState: (state) => {
-      set({
-        gameState: state,
-        isRolling: false,
-        diceAnimationValue: state.dice,
-      });
-    },
-
     setConnectionState: (connectionState) => set({ connectionState }),
     setError: (error) => set({ error }),
 
@@ -129,14 +118,15 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
       const { gameState, userId, isRolling } = get();
 
       // UI guard only - actual validation is on server
-      if (!gameState || gameState.phase !== 'ROLL') return;
+      if (!gameState) return;
+      if (gameState.phase !== 'ROLL') return;
       if (gameState.currentTurn !== userId) return;
       if (isRolling) return;
 
       // Start dice animation
       set({ isRolling: true });
 
-      // Play dice sound (self-hosted for security)
+      // Play dice sound
       const diceSound = new Audio('/sounds/dice-roll.mp3');
       diceSound.volume = 0.3;
       diceSound.play().catch(() => {});
@@ -149,43 +139,12 @@ export const useGameStore = create<UIState & GameActions>((set, get) => {
       const { gameState, userId } = get();
 
       // UI guard only - actual validation is on server
-      if (!gameState || gameState.phase !== 'MOVE') return;
+      if (!gameState) return;
+      if (gameState.phase !== 'MOVE') return;
       if (gameState.currentTurn !== userId) return;
 
       // Send intent to server
       gameSocket.send({ type: 'MOVE_TOKEN', tokenIndex });
     },
-
-    // UI-only actions
-    setRolling: (isRolling) => set({ isRolling }),
-
-    animateDice: () => {
-      // Random animation value for visual feedback while rolling
-      const randomValue = Math.floor(Math.random() * 6) + 1;
-      set({ diceAnimationValue: randomValue });
-    },
   };
 });
-
-// Derived selectors
-export const useIsMyTurn = () => {
-  const gameState = useGameStore((s) => s.gameState);
-  const userId = useGameStore((s) => s.userId);
-  return gameState?.currentTurn === userId;
-};
-
-export const useCurrentPhase = () => {
-  return useGameStore((s) => s.gameState?.phase ?? 'WAITING');
-};
-
-export const useMovableTokens = () => {
-  return useGameStore((s) => s.gameState?.movableTokens ?? []);
-};
-
-export const useMyColor = () => {
-  const gameState = useGameStore((s) => s.gameState);
-  const userId = useGameStore((s) => s.userId);
-  const players = gameState?.players ?? [];
-  const player = players.find((p) => p.id === userId);
-  return player?.color;
-};
