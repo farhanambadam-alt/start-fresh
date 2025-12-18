@@ -134,10 +134,16 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     return playerTokens.filter(pos => pos >= pathLength - 1).length;
   };
 
-  // Get current player's color (safe access)
-  const currentPlayerColor = gameState ? 
-    (players.find(p => p.id === gameState.currentTurn)?.color as PlayerColor | undefined) : 
+  // Get current player's color (safe access with type validation)
+  const rawCurrentPlayerColor = gameState ? 
+    players.find(p => p.id === gameState.currentTurn)?.color : 
     undefined;
+  
+  // Validate that the color is a valid PlayerColor before using
+  const currentPlayerColor: PlayerColor | undefined = 
+    rawCurrentPlayerColor && ['red', 'green', 'yellow', 'blue'].includes(rawCurrentPlayerColor) 
+      ? rawCurrentPlayerColor as PlayerColor 
+      : undefined;
 
   // Handle token click
   const handleTokenClick = (tokenIndex: number) => {
