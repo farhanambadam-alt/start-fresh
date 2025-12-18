@@ -6,9 +6,9 @@
  */
 
 import React, { useState } from 'react';
-import { Users, Plus, LogIn, Loader2, Copy, Check, Wifi, WifiOff } from 'lucide-react';
+import { Users, Plus, LogIn, Loader2, Copy, Check, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { useGameStore, useMyColor } from '@/state/gameState';
-import { generateRoomCode } from '@/network/gameSocket';
+import { generateRoomCode, validateRoomCode } from '@/network/gameSocket';
 import { PlayerColor } from '@/data/ludoData';
 
 const PLAYER_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
@@ -29,6 +29,7 @@ const GameLobby: React.FC<GameLobbyProps> = ({ onJoinRoom }) => {
   const [roomCode, setRoomCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
   
   const myColor = useMyColor();
   const userId = useGameStore((s) => s.userId);
@@ -50,12 +51,29 @@ const GameLobby: React.FC<GameLobbyProps> = ({ onJoinRoom }) => {
     onJoinRoom(newRoomCode);
   };
 
+  const handleRoomCodeChange = (value: string) => {
+    const upperValue = value.toUpperCase();
+    setRoomCode(upperValue);
+    
+    // Clear error when user starts typing
+    if (roomCodeError) {
+      setRoomCodeError(null);
+    }
+  };
+
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
-    if (roomCode.length >= 4) {
-      setIsCreating(false);
-      onJoinRoom(roomCode.toUpperCase());
+    const upperCode = roomCode.toUpperCase();
+    
+    // Validate room code format before sending
+    if (!validateRoomCode(upperCode)) {
+      setRoomCodeError('Room code must be 4-6 alphanumeric characters');
+      return;
     }
+    
+    setIsCreating(false);
+    setRoomCodeError(null);
+    onJoinRoom(upperCode);
   };
 
   // Connection status indicator
@@ -200,11 +218,21 @@ const GameLobby: React.FC<GameLobbyProps> = ({ onJoinRoom }) => {
           <input
             type="text"
             value={roomCode}
-            onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+            onChange={(e) => handleRoomCodeChange(e.target.value)}
             placeholder="Enter Room Code"
             maxLength={6}
-            className="w-full px-4 py-3 rounded-xl bg-secondary border border-border text-foreground placeholder:text-muted-foreground font-mono text-lg tracking-wider text-center mb-4 focus:outline-none focus:ring-2 focus:ring-primary"
+            pattern="[A-Za-z0-9]*"
+            className={`w-full px-4 py-3 rounded-xl bg-secondary border text-foreground placeholder:text-muted-foreground font-mono text-lg tracking-wider text-center mb-2 focus:outline-none focus:ring-2 focus:ring-primary ${
+              roomCodeError ? 'border-destructive' : 'border-border'
+            }`}
           />
+          
+          {roomCodeError && (
+            <p className="text-destructive text-sm flex items-center gap-1 mb-2">
+              <AlertCircle size={14} />
+              {roomCodeError}
+            </p>
+          )}
           
           <button
             type="submit"

@@ -17,14 +17,33 @@ export type ClientMessage =
   | { type: 'ROLL_DICE' }
   | { type: 'MOVE_TOKEN'; tokenIndex: number };
 
+// Validation regex for room codes (4-6 alphanumeric characters, uppercase)
+const ROOM_CODE_REGEX = /^[A-Z0-9]{4,6}$/;
+
 /**
- * Generate a random 6-character room code
+ * Validate room code format
+ */
+export const validateRoomCode = (roomCode: string): boolean => {
+  return ROOM_CODE_REGEX.test(roomCode);
+};
+
+/**
+ * Validate token index (must be 0-3)
+ */
+export const validateTokenIndex = (tokenIndex: number): boolean => {
+  return Number.isInteger(tokenIndex) && tokenIndex >= 0 && tokenIndex <= 3;
+};
+
+/**
+ * Generate a random 6-character room code using crypto API
  */
 export const generateRoomCode = (): string => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const array = new Uint32Array(6);
+  crypto.getRandomValues(array);
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(array[i] % chars.length);
   }
   return code;
 };
@@ -234,10 +253,27 @@ class GameSocket {
   }
 
   /**
-   * Send a message to the server
+   * Send a message to the server with input validation
    */
   send(message: ClientMessage) {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      // Validate inputs before sending
+      if (message.type === 'JOIN_ROOM') {
+        if (!validateRoomCode(message.roomCode)) {
+          console.error('[GameSocket] Invalid room code format');
+          this.callbacks?.onError('Invalid room code format. Must be 4-6 alphanumeric characters.');
+          return;
+        }
+      }
+      
+      if (message.type === 'MOVE_TOKEN') {
+        if (!validateTokenIndex(message.tokenIndex)) {
+          console.error('[GameSocket] Invalid token index');
+          this.callbacks?.onError('Invalid token selection.');
+          return;
+        }
+      }
+      
       console.log('[GameSocket] Sending:', message.type);
       this.ws.send(JSON.stringify(message));
     } else {

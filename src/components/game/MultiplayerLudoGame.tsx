@@ -10,30 +10,57 @@
  */
 
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/state/gameState';
+import { supabase } from '@/integrations/supabase/client';
 import GameLobby from './GameLobby';
 import GameBoard from './GameBoard';
 
 const MultiplayerLudoGame: React.FC = () => {
+  const navigate = useNavigate();
   const { 
     gameState, 
     connectionState, 
     connectToRoom, 
     disconnect,
     setAuth,
-    userId 
+    userId,
+    error
   } = useGameStore();
 
-  // For now, generate a simple user ID (in production, use Supabase auth)
+  // Use Supabase auth for user identification
   useEffect(() => {
-    // Generate or retrieve user ID from localStorage
-    let storedUserId = localStorage.getItem('ludo:userId');
-    if (!storedUserId) {
-      storedUserId = `user_${Math.random().toString(36).substring(2, 9)}`;
-      localStorage.setItem('ludo:userId', storedUserId);
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        setAuth(session.user.id, session.access_token);
+      } else {
+        // No session - redirect to auth
+        navigate('/auth');
+      }
+    };
+
+    initAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setAuth(session.user.id, session.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [setAuth, navigate]);
+
+  // Handle auth required error from WebSocket
+  useEffect(() => {
+    if (error === 'Please log in to play') {
+      navigate('/auth');
     }
-    setAuth(storedUserId, ''); // No auth token for now
-  }, [setAuth]);
+  }, [error, navigate]);
 
   // Determine current view based on state
   const isInGame = gameState?.phase && gameState.phase !== 'WAITING' && gameState.phase !== 'END';
