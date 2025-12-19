@@ -5,7 +5,7 @@
  * Only sends player intents (roll dice, move token) - never computes game logic.
  * 
  * HARD NULL GUARDS (NO EXCEPTIONS):
- * - if (!gameState) return null;
+ * - if (!gameState) return loading/waiting state;
  * - const players = gameState?.players ?? [];
  * - const tokens = gameState?.tokens ?? {};
  * 
@@ -18,11 +18,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LUDO_DATA, PlayerColor } from '@/data/ludoData';
 import { useGameStore } from '@/state/gameState';
+import { gameSocket } from '@/network/gameSocket';
 import Dice3D from './Dice3D';
 import Token from './Token';
 import VictoryCounter from './VictoryCounter';
 import PlayerAvatar from './PlayerAvatar';
-import { Volume2, VolumeX, LogOut, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Volume2, VolumeX, LogOut, Wifi, WifiOff, Loader2, Copy, Check } from 'lucide-react';
 
 const WORLD_SIZE = 1000;
 const PLAYERS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
@@ -39,9 +40,13 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
   const [transform, setTransform] = useState({ scale: 1, tx: 0, ty: 0 });
   const [worldHeight, setWorldHeight] = useState(WORLD_SIZE / DEFAULT_ASPECT);
   const [isMuted, setIsMuted] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   // State from store (server-synced)
   const { gameState, connectionState, isRolling, diceAnimationValue, rollDice, moveToken, userId } = useGameStore();
+  
+  // Get room code from socket if gameState is null (waiting for server)
+  const roomCode = gameState?.roomCode ?? gameSocket.getRoomCode();
   
   // HARD NULL GUARDS - Safe state derivation with fallbacks
   const phase = gameState?.phase ?? 'WAITING';
@@ -166,14 +171,14 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     }
   };
 
-  // HARD NULL GUARD - Before any render
-  if (!gameState) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background">
-        <Loader2 className="animate-spin text-primary" size={48} />
-      </div>
-    );
-  }
+  // Copy room code to clipboard
+  const copyRoomCode = async () => {
+    if (roomCode) {
+      await navigator.clipboard.writeText(roomCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div ref={containerRef} className="fixed inset-0 overflow-hidden bg-background">
@@ -207,7 +212,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
       {/* Turn Indicator - Disabled when not my turn */}
       <div className="fixed top-4 left-4 z-50 px-4 py-2 rounded-full bg-card/90 backdrop-blur-sm border border-border">
         <span className={`font-medium capitalize ${isMyTurn ? 'text-green-400' : 'text-muted-foreground'}`}>
-          {isMyTurn ? 'Your turn!' : `${currentPlayerColor ?? 'Waiting'}'s turn`}
+          {!gameState ? 'Waiting for players...' : isMyTurn ? 'Your turn!' : `${currentPlayerColor ?? 'Waiting'}'s turn`}
         </span>
       </div>
 
@@ -221,11 +226,28 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
         </div>
       )}
 
-      {/* Room Info */}
-      {gameState.roomCode && (
-        <div className="fixed bottom-4 left-4 z-50 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur-sm border border-border">
+      {/* Waiting for game state overlay */}
+      {!gameState && connectionState === 'joining' && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+          <div className="rounded-xl border border-border bg-card/90 px-8 py-6 text-center">
+            <Loader2 className="animate-spin mx-auto mb-4 text-primary" size={32} />
+            <p className="text-foreground font-medium">Waiting for players to join...</p>
+            {roomCode && (
+              <p className="text-muted-foreground mt-2 text-sm">Share room code: <span className="font-mono font-bold text-foreground">{roomCode}</span></p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Room Info - Always show if roomCode exists */}
+      {roomCode && (
+        <div 
+          className="fixed bottom-4 left-4 z-50 px-3 py-1.5 rounded-lg bg-card/90 backdrop-blur-sm border border-border cursor-pointer hover:bg-secondary transition-colors flex items-center gap-2"
+          onClick={copyRoomCode}
+        >
           <span className="text-xs text-muted-foreground">Room: </span>
-          <span className="text-sm font-mono font-bold text-foreground">{gameState.roomCode}</span>
+          <span className="text-sm font-mono font-bold text-foreground">{roomCode}</span>
+          {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} className="text-muted-foreground" />}
         </div>
       )}
 

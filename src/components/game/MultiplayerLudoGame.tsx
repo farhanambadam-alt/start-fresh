@@ -71,22 +71,15 @@ const MultiplayerLudoGame: React.FC = () => {
 
   // UI DERIVATION - Derive screen from connectionState (NEVER from stored screen state)
   
-  // AUTH screen: authenticating
-  if (connectionState === 'authenticating') {
-    return <GameLobby onJoinRoom={handleJoinRoom} />;
-  }
-  
-  // WAITING_ROOM/GAME screen: joining or in_game with gameState
-  if (connectionState === 'joining') {
-    return <GameBoard onLeave={handleLeaveGame} />;
-  }
-  
-  if (connectionState === 'in_game' && gameState) {
-    // Both GAME and RESULT screens use GameBoard (winner modal is inside)
+  // Show GameBoard when:
+  // - joining (waiting for game state from server)
+  // - in_game (actively playing)
+  // - reconnecting (trying to reconnect)
+  if (connectionState === 'joining' || connectionState === 'in_game' || connectionState === 'reconnecting') {
     return <GameBoard onLeave={handleLeaveGame} />;
   }
 
-  // Default: show lobby (disconnected, connecting, error, reconnecting states)
+  // Default: show lobby (disconnected, connecting, authenticating, error states)
   return <GameLobby onJoinRoom={handleJoinRoom} />;
 };
 
