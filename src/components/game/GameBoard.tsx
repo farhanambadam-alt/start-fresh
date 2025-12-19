@@ -123,17 +123,20 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     const playerTokens = tokens[playerId] ?? [-1, -1, -1, -1];
     const tokenPathIndex = playerTokens[tokenIndex];
     
+    const colorData = LUDO_DATA[color];
+    if (!colorData) return null;
+    
     if (tokenPathIndex === -1) {
-      return LUDO_DATA[color].base[tokenIndex];
+      return colorData.base?.[tokenIndex] ?? null;
     }
     
-    const path = LUDO_DATA[color].path;
+    const path = colorData.path ?? [];
     if (tokenPathIndex >= 0 && tokenPathIndex < path.length) {
       return path[tokenPathIndex];
     }
     
     // Token finished
-    return path[path.length - 1];
+    return path.length > 0 ? path[path.length - 1] : null;
   };
 
   // Get finished count for a player
@@ -142,7 +145,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
     if (!player) return 0;
     
     const playerTokens = tokens[player.id] ?? [-1, -1, -1, -1];
-    const pathLength = LUDO_DATA[color].path.length;
+    const pathLength = LUDO_DATA[color]?.path?.length ?? 57;
     return playerTokens.filter(pos => pos >= pathLength - 1).length;
   };
 
@@ -253,6 +256,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
 
       {/* Game World */}
       <div
+        className="relative"
         style={{
           width: WORLD_SIZE,
           height: worldHeight,
@@ -261,6 +265,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           position: 'absolute',
         }}
       >
+        {/* Video Background - z-0 */}
         <video
           ref={videoRef}
           src="/ludo-board.mp4"
@@ -268,12 +273,13 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           loop
           muted={isMuted}
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover z-0"
         />
 
-        {/* Player Avatars - Use LUDO_DATA[color].ui for layout positions */}
+        {/* Player Avatars - Use LUDO_DATA[color].ui for layout positions - z-10 */}
         {PLAYERS.map((color) => {
-          const layoutUi = LUDO_DATA[color].ui;
+          const layoutUi = LUDO_DATA[color]?.ui;
+          if (!layoutUi) return null;
           const isPlayerInGame = players.some((p) => p.color === color);
 
           return (
@@ -285,14 +291,15 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
               width={layoutUi.avatar.width}
               height={layoutUi.avatar.height}
               isActive={currentPlayerColor === color}
-              style={{ opacity: isPlayerInGame ? 1 : 0.3 }}
+              style={{ opacity: isPlayerInGame ? 1 : 0.3, zIndex: 10, position: 'relative' }}
             />
           );
         })}
 
-        {/* Dice - Only for current player's position */}
+        {/* Dice - Only for current player's position - z-20 */}
         {currentPlayerColor && (() => {
-          const layoutUi = LUDO_DATA[currentPlayerColor].ui;
+          const layoutUi = LUDO_DATA[currentPlayerColor]?.ui;
+          if (!layoutUi) return null;
           const diceSize = (layoutUi.dice.width / 100) * WORLD_SIZE * 0.8;
           const canClick = isMyTurn && phase === 'ROLL';
 
@@ -304,6 +311,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
                 top: `${layoutUi.dice.y}%`,
                 width: `${layoutUi.dice.width}%`,
                 height: `${layoutUi.dice.height}%`,
+                zIndex: 20,
               }}
             >
               <Dice3D
@@ -318,19 +326,21 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           );
         })()}
 
-        {/* Render Tokens - Use tokens[player.id] ?? [-1, -1, -1, -1] pattern */}
+        {/* Render Tokens - Use tokens[player.id] ?? [-1, -1, -1, -1] pattern - z-15 */}
         {players.map((player) => {
           const color = player.color as PlayerColor;
           if (!color || !PLAYERS.includes(color)) return null;
 
           const tokenPositions = tokens[player.id] ?? [-1, -1, -1, -1];
-          const pathLength = LUDO_DATA[color].path.length;
+          const pathLength = LUDO_DATA[color]?.path?.length ?? 57;
 
           return tokenPositions.map((pathIndex, tokenIndex) => {
             // Skip finished tokens
             if (pathIndex >= pathLength - 1) return null;
 
             const pos = getTokenPosition(color, player.id, tokenIndex);
+            if (!pos) return null;
+            
             const isSelectable = isMyTurn && player.id === userId && phase === 'MOVE' && movableTokens.includes(tokenIndex);
 
             return (
@@ -339,7 +349,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
                 color={color}
                 position={pos}
                 pathIndex={pathIndex}
-                path={LUDO_DATA[color].path}
+                path={LUDO_DATA[color]?.path ?? []}
                 size={tokenPixelSize}
                 isActive={false}
                 isSelectable={isSelectable}
@@ -349,12 +359,13 @@ const GameBoard: React.FC<GameBoardProps> = ({ onLeave }) => {
           });
         })}
 
-        {/* Victory Counters */}
+        {/* Victory Counters - z-25 */}
         {PLAYERS.map((color) => {
           const count = getFinishedCount(color);
           if (count === 0) return null;
 
-          const path = LUDO_DATA[color].path;
+          const path = LUDO_DATA[color]?.path;
+          if (!path || path.length === 0) return null;
           const finishPos = path[path.length - 1];
 
           return (
